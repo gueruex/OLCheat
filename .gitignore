@@ -1,0 +1,25 @@
+# Binary executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Output of 'go build' (if you build to a specific folder)
+bin/
+out/
+
+# Test binaries
+*.test
+
+# Dependency directories
+vendor/
+
+# Coverage reports
+*.out
+
+# Secrets
+.env
+example_response_request/
+ca.pem
+debug_auth_login.json
