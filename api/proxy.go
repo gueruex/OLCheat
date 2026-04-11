@@ -44,15 +44,16 @@ func checkCaCert() {
 	}
 }
 
+var savedMetadata bool
+
 func StartProxy(port string) {
 	checkCaCert()
 
 	proxy := goproxy.NewProxyHttpServer()
-	// Disable goproxy's default overly-verbose standard logger to reduce noise
 	proxy.Verbose = false
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
-	// Dump Intercepted Requests (Filtered)
+	// Dump Intercepted Requests and Harvest Metadata
 	proxy.OnRequest().DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			host := r.Host
@@ -61,7 +62,19 @@ func StartProxy(port string) {
 				if path == "" {
 					path = "/"
 				}
-				log.Printf("[SNIFF] -> %s %s%s", r.Method, host, path)
+
+				if !savedMetadata {
+					version := r.Header.Get("Version")
+					unityVer := r.Header.Get("X-Unity-Version")
+					ua := r.Header.Get("User-Agent")
+
+					if version != "" && unityVer != "" && ua != "" {
+						upsertEnv("APP_VERSION", version)
+						upsertEnv("UNITY_VERSION", unityVer)
+						upsertEnv("USER_AGENT", ua)
+						savedMetadata = true
+					}
+				}
 			}
 			return r, nil
 		})
@@ -77,21 +90,14 @@ func StartProxy(port string) {
 				bodyBytes, err := io.ReadAll(r.Body)
 				if err == nil {
 					_ = r.Body.Close()
-					// Restore the body for downstream clients
 					r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-					// Dump payload for manual inspection
-					_ = os.WriteFile("debug_auth_login.json", bodyBytes, 0644)
-					log.Printf("===================================================")
-					log.Printf("[DEBUG] Intercepted /auth/login response!")
-					log.Printf("[DEBUG] Full body dumped to debug_auth_login.json")
 
 					var respData struct {
 						AccessToken string `json:"accessToken"`
 					}
 					if err := json.Unmarshal(bodyBytes, &respData); err == nil && respData.AccessToken != "" {
 						log.Printf("[DEBUG] Successfully parsed accessToken.")
-						saveTokenToEnv(respData.AccessToken)
+						upsertEnv("BEARER_TOKEN", respData.AccessToken)
 					} else {
 						log.Printf("[ERROR] Failed to unmarshal /auth/login accessToken: %v", err)
 					}
@@ -111,7 +117,7 @@ func StartProxy(port string) {
 	}
 }
 
-func saveTokenToEnv(token string) {
+func upsertEnv(key, value string) {
 	b, _ := os.ReadFile(".env")
 	lines := strings.Split(string(b), "\n")
 
@@ -119,22 +125,22 @@ func saveTokenToEnv(token string) {
 	found := false
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "BEARER_TOKEN=") {
-			out = append(out, "BEARER_TOKEN="+token)
+		if strings.HasPrefix(line, key+"=") {
+			out = append(out, key+"="+value)
 			found = true
 		} else if line != "" {
 			out = append(out, line)
 		}
 	}
 	if !found {
-		out = append(out, "BEARER_TOKEN="+token)
+		out = append(out, key+"="+value)
 	}
 
 	content := strings.Join(out, "\n") + "\n"
 	err := os.WriteFile(".env", []byte(content), 0644)
 	if err != nil {
-		log.Printf("Error writing token to .env: %v", err)
+		log.Printf("Error writing %s to .env: %v", key, err)
 	} else {
-		log.Printf("[SUCCESS] Saved BEARER_TOKEN to .env")
+		log.Printf("[SUCCESS] Saved %s to .env", key)
 	}
 }

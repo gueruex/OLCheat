@@ -22,4 +22,4 @@ vendor/
 .env
 example_response_request/
 ca.pem
-debug_auth_login.json
+scratch/
