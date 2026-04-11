@@ -56,6 +56,8 @@ func StartApp(client *api.OverlewdClient) {
 	TabPages.AddPage("Battler", BuildTabGrinder(), true, true)
 	TabPages.AddPage("Gacha", BuildTabGacha(), true, false)
 	TabPages.AddPage("Dissolve", BuildTabDissolve(), true, false)
+	TabPages.AddPage("Market", BuildTabMarket(), true, false)
+	TabPages.AddPage("Campaigner", BuildTabCampaigner(), true, false)
 
 	// 3. Navigation Header Instructions
 	header := tview.NewTextView().
@@ -64,7 +66,7 @@ func StartApp(client *api.OverlewdClient) {
 		SetTextAlign(tview.AlignCenter)
 
 	updateHeader := func(expStr string) {
-		fmt.Fprintf(header, ` ["F1"][yellow][F1] Battler[""]  ["F2"][green][F2] Gacha[""]  ["F3"][red][F3] Batch Dissolve[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, expStr)
+		fmt.Fprintf(header, ` ["F1"][yellow][F1] Battler[""]  ["F2"][green][F2] Gacha[""]  ["F3"][red][F3] Batch Dissolve[""]  ["F4"][blue][F4] Market[""]  ["F5"][magenta][F5] Campaigner[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, expStr)
 	}
 
 	// Decode JWT Payload for Expiration
@@ -168,6 +170,10 @@ func StartApp(client *api.OverlewdClient) {
 				TabPages.SwitchToPage("Gacha")
 			case "F3":
 				TabPages.SwitchToPage("Dissolve")
+			case "F4":
+				TabPages.SwitchToPage("Market")
+			case "F5":
+				TabPages.SwitchToPage("Campaigner")
 			case "ESC":
 				App.Stop()
 			}
@@ -184,6 +190,12 @@ func StartApp(client *api.OverlewdClient) {
 			return nil
 		} else if event.Key() == tcell.KeyF3 {
 			TabPages.SwitchToPage("Dissolve")
+			return nil
+		} else if event.Key() == tcell.KeyF4 {
+			TabPages.SwitchToPage("Market")
+			return nil
+		} else if event.Key() == tcell.KeyF5 {
+			TabPages.SwitchToPage("Campaigner")
 			return nil
 		} else if event.Key() == tcell.KeyEscape {
 			App.Stop()

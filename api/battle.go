@@ -71,7 +71,7 @@ func WorkerLoop(ctx context.Context, client *OverlewdClient, endpoint string, st
 						case "equipment":
 							name = fmt.Sprintf("Equipment Item %d", id)
 						}
-						earned = append(earned, fmt.Sprintf("[white]%dx[green] %s", amt, name))
+						earned = append(earned, fmt.Sprintf("[white]%dx [green]%s[white]", amt, name))
 					}
 				}
 				if len(earned) > 0 {

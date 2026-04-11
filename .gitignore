@@ -18,10 +18,11 @@ vendor/
 # Coverage reports
 *.out
 
-# Secrets
+# User stuff
 .env
 example_response_request/
 ca.pem
 ca.cer
 scratch/
 fr_posts/
+500_error_fix/

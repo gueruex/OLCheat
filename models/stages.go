@@ -10,12 +10,14 @@ import (
 )
 
 type Stage struct {
-	ID       int    `json:"id"`
-	Title    string `json:"title"`
-	Key      string `json:"key"`
-	Type     string `json:"type"`
-	BattleID *int   `json:"battleId"`
-	Status   string `json:"status"`
+	ID         int    `json:"id"`
+	Title      string `json:"title"`
+	Key        string `json:"key"`
+	Type       string `json:"type"`
+	BattleID   *int   `json:"battleId"`
+	Status     string `json:"status"`
+	NodeType   string `json:"nodeType"`
+	NextStages []int  `json:"nextStages"`
 
 	// Custom fields we inject for internal TUI routing
 	Endpoint string
@@ -26,10 +28,14 @@ type Stage struct {
 	ReadableChapter  string
 	Rewards          []RewardItem
 	FirstRewards     []RewardItem
+	BattleEnergyCost int
 }
 
 // Global cached slice for our dropdown menus
 var CachedBattles []Stage
+
+// Global unfiltered map maintaining explicit original node schemas for graph routing
+var AllRawStages []*Stage
 
 // FetchStages requests both stage pools using our customized client.
 func FetchStages(client *api.OverlewdClient) error {
@@ -65,6 +71,11 @@ func FetchStages(client *api.OverlewdClient) error {
 		}
 	} else {
 		log.Printf("[ERROR] Fetch failure to /event-stages: %v", err)
+	}
+
+	AllRawStages = make([]*Stage, len(allStages))
+	for i := range allStages {
+		AllRawStages[i] = &allStages[i]
 	}
 
 	// Filter purely for stages that have battles to grind AND are accessible (open or complete)

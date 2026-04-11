@@ -6,16 +6,40 @@ import (
 	"log"
 )
 
+type TradablePriceNode struct {
+	CurrencyID int `json:"currencyId"`
+	Amount     int `json:"amount"`
+}
+
+type TradablePriceBlock struct {
+	Price []TradablePriceNode `json:"price"`
+}
+
+type TradableItemPackNode struct {
+	TradableID int `json:"tradableId"`
+	Count      int `json:"count"`
+}
+
 type CurrencyNode struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Rarity string `json:"rarity"`
-	Key    string `json:"key"`
+	ID          int                    `json:"id"`
+	Name        string                 `json:"name"`
+	Rarity      string                 `json:"rarity"`
+	Key         string                 `json:"key"`
+	Description string                 `json:"description"`
+	ItemPack    []TradableItemPackNode `json:"itemPack"`
+	Price       TradablePriceBlock     `json:"price"`
+}
+
+type TradableDetails struct {
+	Description string
+	PriceString string
+	Includes    []TradableItemPackNode
 }
 
 var CurrencyCache = make(map[int]string)
 var RarityCache = make(map[int]string)
 var CharacterCache = make(map[int]string)
+var TradableCache = make(map[int]TradableDetails)
 
 func EnrichCurrencies(client *OverlewdClient) {
 	log.Println("[INFO] Hydrating Global Mixed Dictionary (Currencies + Tradables)...")
@@ -40,6 +64,33 @@ func EnrichCurrencies(client *OverlewdClient) {
 				CurrencyCache[n.ID] = n.Name
 				if n.Rarity != "" {
 					RarityCache[n.ID] = n.Rarity
+				}
+				if endpoint == "/tradable" {
+					priceStr := "Free"
+					if len(n.Price.Price) > 0 {
+						p := n.Price.Price[0]
+						cName := "Unknown Currency"
+						if val, ok := CurrencyCache[p.CurrencyID]; ok {
+							cName = val
+						} else if p.CurrencyID == 65 {
+							cName = "Gems"
+						}
+						
+						if cName == "US Dollar Cent" {
+							priceStr = fmt.Sprintf("%.2f USD", float64(p.Amount)/100.0)
+						} else {
+							priceStr = fmt.Sprintf("%d %s", p.Amount, cName)
+						}
+					}
+					desc := n.Description
+					if desc == "" {
+						desc = "No description provided."
+					}
+					TradableCache[n.ID] = TradableDetails{
+						Description: desc,
+						PriceString: priceStr,
+						Includes:    n.ItemPack,
+					}
 				}
 			}
 		}
@@ -74,4 +125,14 @@ func GetCharacterName(id int) string {
 		return name
 	}
 	return fmt.Sprintf("Unknown Character [%d]", id)
+}
+
+func GetTradableDetails(id int) TradableDetails {
+	if details, exists := TradableCache[id]; exists {
+		return details
+	}
+	return TradableDetails{
+		Description: "No description provided.",
+		PriceString: "Unknown Price",
+	}
 }

@@ -96,7 +96,7 @@ func StartProxyRoutine(port string, onSuccess func(string)) {
 						authSync.Do(func() {
 							log.Printf("[DEBUG] Successfully parsed accessToken.")
 							upsertEnv("BEARER_TOKEN", respData.AccessToken)
-							
+
 							if onSuccess != nil {
 								go onSuccess(respData.AccessToken)
 							}

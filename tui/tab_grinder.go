@@ -66,7 +66,7 @@ func BuildTabGrinder() tview.Primitive {
 					catNode.AddChild(chapNode)
 
 					for _, stg := range stages {
-						stgText := fmt.Sprintf("[%d] %s", stg.ID, stg.Name)
+						stgText := tview.Escape(fmt.Sprintf("[%d] %s", stg.ID, stg.Name))
 						stgNode := tview.NewTreeNode(stgText).
 							SetSelectable(true).
 							SetReference(stg).
