@@ -166,46 +166,15 @@ func EnrichStages(client *api.OverlewdClient) {
 		}
 	}
 
-	for i := range CachedBattles {
-		b := &CachedBattles[i]
-		b.BattleEnergyCost = stageToEnergyCost[b.ID]
-		
-		if b.Endpoint == "ftue-stages" {
-			b.ReadableCategory = "Main Campaign"
-			if chName, ok := stageToFTUEChapter[b.ID]; ok {
-				b.ReadableChapter = chName
-			} else {
-				b.ReadableChapter = "Uncategorized FTUE"
-			}
-
-			if len(b.Name) > 6 && b.Name[:6] == "battle" {
-				b.Name = "Battle " + b.Name[6:]
-			}
-		} else {
-			if evName, ok := stageToEventName[b.ID]; ok {
-				b.ReadableCategory = "Event: " + evName
-			} else {
-				b.ReadableCategory = "Unknown Event Category"
-			}
-
-			if chName, ok := stageToEventChapName[b.ID]; ok {
-				b.ReadableChapter = chName
-			} else {
-				b.ReadableChapter = "Uncategorized Event Chapter"
-			}
-		}
-
-		if b.BattleID != nil {
-			if loreTitle, ok := globalBattleLoreTitles[*b.BattleID]; ok {
-				b.Name = loreTitle
-			}
-			if rw, ok := globalBattleRewards[*b.BattleID]; ok {
-				b.Rewards = rw
-			}
-			if fRw, ok := globalBattleFirstRewards[*b.BattleID]; ok {
-				b.FirstRewards = fRw
-			}
+	newCachedBattles := make([]Stage, 0, len(AllRawStages))
+	for i := range AllRawStages {
+		b := AllRawStages[i]
+		if b.BattleID != nil && b.ReadableCategory != "Unknown Event Category" {
+			newCachedBattles = append(newCachedBattles, *b)
 		}
 	}
+	
+	CachedBattles = newCachedBattles
+
 	log.Println("[INFO] Successfully enriched Battle names with readable dictionaries!")
 }

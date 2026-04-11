@@ -9,6 +9,8 @@ import (
 	"jewrexxx-fearlessrevolution-overlewd-cheat/api"
 )
 
+var ForceReloadGacha func()
+
 func BuildTabGacha() *tview.Flex {
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	flex.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
@@ -88,6 +90,8 @@ func BuildTabGacha() *tview.Flex {
 			})
 		}()
 	}
+
+	ForceReloadGacha = reloadBanners
 
 	form.AddButton("Force Update UI", func() {
 		api.RemoveCacheFile("gacha.json")

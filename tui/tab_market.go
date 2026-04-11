@@ -17,7 +17,7 @@ func BuildTabMarket() *tview.Flex {
 
 	// --- LEFT PANE (MARKET NAVIGATOR) ---
 	treeView := tview.NewTreeView().SetGraphics(true)
-	treeView.SetBorder(true).SetTitle(" [white]Market Stores ").SetTitleAlign(tview.AlignLeft)
+	treeView.SetBorder(true).SetTitle(" [white]Market Stores [red](WiP) ").SetTitleAlign(tview.AlignLeft)
 
 	root := tview.NewTreeNode("Markets").SetSelectable(false)
 	treeView.SetRoot(root).SetCurrentNode(root)
@@ -31,8 +31,8 @@ func BuildTabMarket() *tview.Flex {
 	descView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetWrap(true).
-		SetText("\n  [gray]Highlight a bundle to see its extended description and price...")
-	descView.SetBorder(true).SetTitle(" Bundle Details ")
+		SetText("\n  [red]This module is under construction.\n  [gray]Highlight a bundle to see its extended description and price...")
+	descView.SetBorder(true).SetTitle(" Bundle Details [yellow](Not Implemented) ")
 
 	var selectedGoodID int = 0
 

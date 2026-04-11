@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 )
 
 type TradablePriceNode struct {
@@ -36,10 +37,13 @@ type TradableDetails struct {
 	Includes    []TradableItemPackNode
 }
 
-var CurrencyCache = make(map[int]string)
-var RarityCache = make(map[int]string)
-var CharacterCache = make(map[int]string)
-var TradableCache = make(map[int]TradableDetails)
+var (
+	cacheMutex     sync.RWMutex
+	CurrencyCache  = make(map[int]string)
+	RarityCache    = make(map[int]string)
+	CharacterCache = make(map[int]string)
+	TradableCache  = make(map[int]TradableDetails)
+)
 
 func EnrichCurrencies(client *OverlewdClient) {
 	log.Println("[INFO] Hydrating Global Mixed Dictionary (Currencies + Tradables)...")
@@ -57,6 +61,7 @@ func EnrichCurrencies(client *OverlewdClient) {
 			return
 		}
 
+		cacheMutex.Lock()
 		for _, n := range nodes {
 			if endpoint == "/battles/characters" {
 				CharacterCache[n.ID] = n.Name
@@ -94,6 +99,7 @@ func EnrichCurrencies(client *OverlewdClient) {
 				}
 			}
 		}
+		cacheMutex.Unlock()
 		log.Printf("[INFO] Pushed %d items from [%s] into Dictionary.", len(nodes), endpoint)
 	}
 
@@ -103,6 +109,8 @@ func EnrichCurrencies(client *OverlewdClient) {
 }
 
 func GetCurrencyName(id int) string {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
 	if name, exists := CurrencyCache[id]; exists {
 		return name
 	}
@@ -114,6 +122,8 @@ func GetCurrencyName(id int) string {
 }
 
 func GetItemRarity(id int) string {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
 	if rarity, exists := RarityCache[id]; exists {
 		return rarity
 	}
@@ -121,6 +131,8 @@ func GetItemRarity(id int) string {
 }
 
 func GetCharacterName(id int) string {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
 	if name, exists := CharacterCache[id]; exists {
 		return name
 	}
@@ -128,6 +140,8 @@ func GetCharacterName(id int) string {
 }
 
 func GetTradableDetails(id int) TradableDetails {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
 	if details, exists := TradableCache[id]; exists {
 		return details
 	}

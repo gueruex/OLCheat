@@ -100,6 +100,10 @@ func StartApp(client *api.OverlewdClient) {
 			log.Println("[INFO] Fetching Dictionaries...")
 			models.EnrichStages(client)
 			api.EnrichCurrencies(client)
+
+			if ForceReloadGacha != nil {
+				ForceReloadGacha()
+			}
 		}()
 	}
 
@@ -197,9 +201,9 @@ func StartApp(client *api.OverlewdClient) {
 		} else if event.Key() == tcell.KeyF5 {
 			TabPages.SwitchToPage("Campaigner")
 			return nil
-		} else if event.Key() == tcell.KeyEscape {
-			App.Stop()
-			return nil
+			// } else if event.Key() == tcell.KeyEscape {
+			// 	App.Stop()
+			// 	return nil
 		} else if event.Key() == tcell.KeyDelete {
 			// Dev hook to silent wipe caches
 			log.Println("[DEV] Cache purge triggered via Delete hotkey.")
