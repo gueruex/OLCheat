@@ -50,7 +50,7 @@ func DissolveRarities(client *OverlewdClient, chars []CharacterItem, targets map
 		return
 	}
 
-	log.Printf("[DISSOLVE] Nuke Sequence Initiated for %d characters...", len(toDissolve))
+	log.Printf("[DISSOLVE] Dissolve Sequence Initiated for %d characters...", len(toDissolve))
 	payload := strings.Join(toDissolve, "&")
 
 	req, _ := http.NewRequest("POST", client.BaseURL+"/battles/my/characters/dissolve", strings.NewReader(payload))
@@ -65,7 +65,7 @@ func DissolveRarities(client *OverlewdClient, chars []CharacterItem, targets map
 
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-		log.Printf("[DISSOLVE] Nuke Successful! You gained massive resources. HTTP 200: %s", string(b))
+		log.Printf("[DISSOLVE] Dissolve Successful! You gained massive resources. HTTP 200: %s", string(b))
 	} else {
 		log.Printf("[DISSOLVE] Failed %d: %s", resp.StatusCode, string(b))
 	}

@@ -26,7 +26,7 @@ var (
 
 // NewClient initializes the OverlewdClient using credentials stored in .env
 func NewClient(baseURL string) *OverlewdClient {
-	_ = godotenv.Load() // Loads .env into process
+	_ = godotenv.Load(GetEnvPath()) // Loads .env into process directly from cache
 
 	return &OverlewdClient{
 		BaseURL:      baseURL,
@@ -38,10 +38,7 @@ func NewClient(baseURL string) *OverlewdClient {
 	}
 }
 
-// DoRequest wraps http.Client.Do but dynamically appends tokens, spoofed headers, and acts on 502/504 errors globally.
-func (c *OverlewdClient) DoRequest(req *http.Request) (*http.Response, error) {
-	globalLock.RLock() // Crucial: This blocks if a 10s cooldown is currently locking operations.
-
+func (c *OverlewdClient) prepareRequest(req *http.Request) {
 	if c.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
 	}
@@ -55,8 +52,12 @@ func (c *OverlewdClient) DoRequest(req *http.Request) (*http.Response, error) {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
 	req.Header.Set("Accept", "*/*")
-	// Removed Accept-Encoding to let Go's Native Transport handle gzip decompression.
+}
 
+// DoRequest wraps http.Client.Do but dynamically appends tokens, spoofed headers, and acts on 502/504 errors globally.
+func (c *OverlewdClient) DoRequest(req *http.Request) (*http.Response, error) {
+	globalLock.RLock() // Crucial: This blocks if a 10s cooldown is currently locking operations.
+	c.prepareRequest(req)
 	resp, err := c.HTTPClient.Do(req)
 	globalLock.RUnlock() // Release the reader lock immediately once our packet lands
 
@@ -64,6 +65,16 @@ func (c *OverlewdClient) DoRequest(req *http.Request) (*http.Response, error) {
 	if err == nil && (resp.StatusCode == 502 || resp.StatusCode == 504) {
 		triggerGlobalCooldown()
 	}
+
+	return resp, err
+}
+
+// DoRequestBypassCooldown wraps DoRequest precisely but purposefully drops the global 10s cooldown block, perfect for Caches picking up slack natively.
+func (c *OverlewdClient) DoRequestBypassCooldown(req *http.Request) (*http.Response, error) {
+	globalLock.RLock()
+	c.prepareRequest(req)
+	resp, err := c.HTTPClient.Do(req)
+	globalLock.RUnlock()
 
 	return resp, err
 }

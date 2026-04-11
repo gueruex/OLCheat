@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
+	"log"
+	"net/http"
 
 	"jewrexxx-fearlessrevolution-overlewd-cheat/api"
 	"jewrexxx-fearlessrevolution-overlewd-cheat/models"
@@ -20,6 +22,7 @@ var (
 func BuildTabGrinder() tview.Primitive {
 	localClient := api.NewClient("https://prod.api.overlewd.ru")
 	masterLayout := tview.NewFlex().SetDirection(tview.FlexColumn)
+	masterLayout.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 
 	// --- LEFT PANE (TREE NAVIGATOR) ---
 	treeView := tview.NewTreeView().SetGraphics(true)
@@ -63,7 +66,7 @@ func BuildTabGrinder() tview.Primitive {
 					catNode.AddChild(chapNode)
 
 					for _, stg := range stages {
-						stgText := fmt.Sprintf("[%d] %s", *stg.BattleID, stg.Name)
+						stgText := fmt.Sprintf("[%d] %s", stg.ID, stg.Name)
 						stgNode := tview.NewTreeNode(stgText).
 							SetSelectable(true).
 							SetReference(stg).
@@ -131,7 +134,7 @@ func BuildTabGrinder() tview.Primitive {
 					// Stop Logic
 					cancel()
 					delete(slotCancels, slot)
-					form.GetButton(1).SetLabel("Start Grinding")
+					form.GetButton(1).SetLabel("Start Battle")
 					lbl.SetText("\n[red]Assigned: Loop Stopped")
 				} else {
 					// Start Logic
@@ -154,7 +157,7 @@ func BuildTabGrinder() tview.Primitive {
 
 		slotForm.
 			AddButton("Assign Target", assignClosure).
-			AddButton("Start Grinding", startClosure)
+			AddButton("Start Battle", startClosure)
 
 		slotContainer.AddItem(slotForm, 40, 0, false)
 		slotContainer.AddItem(curTargetLabel, 0, 1, false)
@@ -164,13 +167,10 @@ func BuildTabGrinder() tview.Primitive {
 
 	rightPane.AddItem(slotsFlex, 0, 2, false)
 
-	var networkLogTracker string
-
 	// Live highlight dynamic event
 	treeView.SetChangedFunc(func(node *tview.TreeNode) {
 		ref := node.GetReference()
 		if ref != nil {
-			networkLogTracker = "" // Wipe tracker when a real stage is selected
 			stg := ref.(*models.Stage)
 			rText := ""
 			if len(stg.FirstRewards) > 0 {
@@ -194,21 +194,14 @@ func BuildTabGrinder() tview.Primitive {
 			}
 			rewardsView.SetText(rText)
 		} else {
-			if networkLogTracker != "" {
-				rewardsView.SetText(networkLogTracker)
-			} else {
-				rewardsView.SetText("\n[gray]  Select a stage to view probabilities...")
-			}
+			rewardsView.SetText("\n[gray]  Select a stage to view probabilities...")
 		}
 	})
 
 	controlForm := tview.NewForm()
-	controlForm.SetBorder(true).SetTitle(" Operations ")
-	controlForm.AddButton("Force Update Stages from Remote", func() {
-		App.QueueUpdateDraw(func() {
-			root.ClearChildren()
-			root.AddChild(tview.NewTreeNode("[yellow]Fetching Stages from Network... Please Wait...").SetSelectable(false))
-		})
+	controlForm.AddButton("Update Stages", func() {
+		root.ClearChildren()
+		root.AddChild(tview.NewTreeNode("[yellow]Fetching Stages from Network... Please Wait...").SetSelectable(false))
 		
 		go func() {
 			endpoints := []struct {
@@ -217,25 +210,13 @@ func BuildTabGrinder() tview.Primitive {
 			}{
 				{"/ftue-stages", "ftue_stages.json"},
 				{"/event-stages", "event_stages.json"},
-				{"/ftue", "ftue.json"},
-				{"/events", "events.json"},
-				{"/event-chapters", "event_chapters.json"},
-				{"/battles", "battles.json"},
 			}
 
 			successCount := 0
 			failCount := 0
-			var logs []string
 
 			pushLog := func(idxStr, msg string) {
-				logs = append(logs, fmt.Sprintf("%s %s", idxStr, msg))
-				fullLog := strings.Join(logs, "\n")
-				
-				networkLogTracker = "[yellow]Network Operations Tracker:\n\n[white]" + fullLog
-				
-				App.QueueUpdateDraw(func() {
-					rewardsView.SetText(networkLogTracker)
-				})
+				log.Printf("%s %s", idxStr, msg)
 			}
 
 			for i, e := range endpoints {
@@ -248,17 +229,11 @@ func BuildTabGrinder() tview.Primitive {
 				}
 			}
 
-			logs = append(logs, fmt.Sprintf("\n[green]Successfully updated %d files.[white] ", successCount))
 			if failCount > 0 {
-				logs[len(logs)-1] += fmt.Sprintf("[red]Failed to update %d files.", failCount)
+				log.Printf("[green]Successfully updated %d files. [red]Failed to update %d files.[white]", successCount, failCount)
+			} else {
+				log.Printf("[green]Successfully updated %d files on the network block.[white]", successCount)
 			}
-			
-			fullLog := strings.Join(logs, "\n")
-			networkLogTracker = "[yellow]Network Operations Tracker:\n\n[white]" + fullLog
-			
-			App.QueueUpdateDraw(func() {
-				rewardsView.SetText(networkLogTracker)
-			})
 			
 			// Force reload into ram
 			models.FetchStages(localClient)
@@ -270,9 +245,69 @@ func BuildTabGrinder() tview.Primitive {
 		}()
 	})
 
+	controlForm.AddButton("View Resources", func() {
+		log.Println("[INFO] Fetching User Wallet from API...")
+		go func() {
+			req, _ := http.NewRequest("GET", localClient.BaseURL+"/me", nil)
+			resp, err := localClient.DoRequestBypassCooldown(req)
+			if err != nil {
+				log.Printf("[ERROR] Network failure hitting /me: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			
+			var data struct {
+				Wallet []struct {
+					CurrencyID int `json:"currencyId"`
+					Amount     int `json:"amount"`
+				} `json:"wallet"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+				log.Printf("[ERROR] JSON parse failure on /me: %v", err)
+				return
+			}
+
+			targetIDs := map[int]string{
+				22: "Wood",
+				66: "Stone",
+				25: "Silver",
+				65: "Gems",
+				3:  "Crystals",
+				24: "Magic Spheres",
+				84: "Free Summon Runes",
+				83: "Sacred Runes",
+			}
+			
+			order := []int{22, 66, 25, 65, 3, 24, 84, 83}
+			
+			output := "[white]===============\n[magenta]Current Resources[white]\n===============\n\n"
+			for _, id := range order {
+				amt := 0
+				for _, w := range data.Wallet {
+					if w.CurrencyID == id {
+						amt = w.Amount
+						break
+					}
+				}
+				output += fmt.Sprintf(" [yellow]%-18s[white] %d\n", targetIDs[id]+":", amt)
+			}
+			output += "\n"
+			
+			App.QueueUpdateDraw(func() {
+				modal := tview.NewModal().
+					SetText(output).
+					AddButtons([]string{"Close"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						TabPages.RemovePage("ResourcesModal")
+					})
+				TabPages.AddPage("ResourcesModal", modal, true, true)
+			})
+		}()
+	})
+
 	leftPane := tview.NewFlex().SetDirection(tview.FlexRow)
-	leftPane.AddItem(controlForm, 5, 0, false)
 	leftPane.AddItem(treeView, 0, 3, true)
+	leftPane.AddItem(controlForm, 3, 0, false)
 	leftPane.AddItem(rewardsView, 0, 1, false)
 
 	masterLayout.AddItem(leftPane, 0, 3, true)

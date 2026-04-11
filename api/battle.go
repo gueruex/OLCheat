@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -58,21 +59,19 @@ func WorkerLoop(ctx context.Context, client *OverlewdClient, endpoint string, st
 			var respMap map[string]interface{}
 			if err := json.Unmarshal(b, &respMap); err == nil {
 				var earned []string
-				if rw, ok := respMap["reward"]; ok {
-					if rewardsArr, ok2 := rw.([]interface{}); ok2 {
-						for _, itemRaw := range rewardsArr {
-							if itemMap, ok3 := itemRaw.(map[string]interface{}); ok3 {
-								// Type assertion guard
-								var tradID, amt int
-								if tID, ok := itemMap["tradableId"].(float64); ok {
-									tradID = int(tID)
-								}
-								if aID, ok := itemMap["amount"].(float64); ok {
-									amt = int(aID)
-								}
-								earned = append(earned, fmt.Sprintf("[white]%dx[green] %s", amt, GetCurrencyName(tradID)))
-							}
+				lootMap := ExtractGachaLootRecursively(respMap)
+				for key, amt := range lootMap {
+					parts := strings.Split(key, ":")
+					if len(parts) == 2 {
+						id, _ := strconv.Atoi(parts[1])
+						name := GetCurrencyName(id)
+						switch parts[0] {
+						case "character":
+							name = fmt.Sprintf("Character %d", id)
+						case "equipment":
+							name = fmt.Sprintf("Equipment Item %d", id)
 						}
+						earned = append(earned, fmt.Sprintf("[white]%dx[green] %s", amt, name))
 					}
 				}
 				if len(earned) > 0 {

@@ -12,6 +12,7 @@ var RosterCache []api.CharacterItem
 
 func BuildTabDissolve() *tview.Flex {
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	flex.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	localClient := api.NewClient("https://prod.api.overlewd.ru")
 
 	// Left: Stats
@@ -79,7 +80,7 @@ func BuildTabDissolve() *tview.Flex {
 		}()
 	}
 
-	form.AddButton("NUKE SELECTED", func() {
+	form.AddButton("DISSOLVE SELECTED", func() {
 		targets := map[string]bool{
 			"basic":    form.GetFormItem(0).(*tview.Checkbox).IsChecked(),
 			"advanced": form.GetFormItem(1).(*tview.Checkbox).IsChecked(),
@@ -100,15 +101,15 @@ func BuildTabDissolve() *tview.Flex {
 					if buttonLabel == "Yes, Wipe Them" {
 						executeDissolve(targets)
 					}
-					TabPages.RemovePage("modal_nuke")
+					TabPages.RemovePage("modal_dissolve")
 				})
-			TabPages.AddPage("modal_nuke", modal, true, true)
+			TabPages.AddPage("modal_dissolve", modal, true, true)
 		} else {
 			executeDissolve(targets)
 		}
 	})
 
-	form.SetBorder(true).SetTitle(" Nuke Criteria ")
+	form.SetBorder(true).SetTitle(" Rarity Criteria ")
 	rightPanel.AddItem(form, 0, 1, true)
 
 	flex.AddItem(statsView, 0, 1, false)

@@ -22,6 +22,10 @@ func getCacheDir() string {
 	return targetDir
 }
 
+func GetEnvPath() string {
+	return filepath.Join(getCacheDir(), ".env")
+}
+
 // EnsureCacheWiped wipes the entire ./olcheat appcache
 func EnsureCacheWiped() {
 	targetDir := getCacheDir()
@@ -57,7 +61,7 @@ func SafeForceUpdateCache(endpoint string, filename string, client *OverlewdClie
 		if err == nil {
 			errWrite := os.WriteFile(targetFile, b, 0644)
 			if errWrite == nil {
-				onProgress(progressIdx, fmt.Sprintf("%s updated", filename))
+				onProgress(progressIdx, fmt.Sprintf("[green]%s updated[white]", filename))
 				return true
 			}
 		}
@@ -84,7 +88,7 @@ func LoadOrFetch(endpoint string, filename string, client *OverlewdClient) ([]by
 
 	if _, err := os.Stat(targetFile); err == nil {
 		// File exists! Load instantly.
-		log.Printf("[CACHE] Loaded %s from lightning cache!", filename)
+		log.Printf("[CACHE] Loaded %s from cache.", filename)
 		b, err := os.ReadFile(targetFile)
 		if err == nil {
 			return b, nil
@@ -107,7 +111,7 @@ func LoadOrFetch(endpoint string, filename string, client *OverlewdClient) ([]by
 
 func forceFetch(endpoint string, client *OverlewdClient) ([]byte, error) {
 	req, _ := http.NewRequest("GET", client.BaseURL+endpoint, nil)
-	resp, err := client.DoRequest(req)
+	resp, err := client.DoRequestBypassCooldown(req)
 	if err != nil {
 		return nil, err
 	}

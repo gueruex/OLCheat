@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	App      *tview.Application
-	LogView  *tview.TextView
-	TabPages *tview.Pages
+	App          *tview.Application
+	LogView      *tview.TextView
+	TabPages     *tview.Pages
+	NeedsRestart bool
 )
 
 // customLogger intercepts standard logs and pushes them linearly to the LogView pane
@@ -27,11 +28,7 @@ type customLogger struct{}
 
 func (cl *customLogger) Write(p []byte) (n int, err error) {
 	if LogView != nil && App != nil {
-		// Log pane strictly appended to
 		str := string(p)
-		
-		// Force the app to redraw the screen upon each newly emitted log
-		// And ensure appending to LogView is thread-safe!
 		go App.QueueUpdateDraw(func() {
 			fmt.Fprintf(LogView, "%s", str)
 			LogView.ScrollToEnd()
@@ -40,7 +37,7 @@ func (cl *customLogger) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func StartApp() {
+func StartApp(client *api.OverlewdClient) {
 	App = tview.NewApplication()
 
 	// 1. Setup the shared Log output pane
@@ -56,7 +53,7 @@ func StartApp() {
 
 	// 2. Setup the Tabbed Pages
 	TabPages = tview.NewPages()
-	TabPages.AddPage("Grinder", BuildTabGrinder(), true, true)
+	TabPages.AddPage("Battler", BuildTabGrinder(), true, true)
 	TabPages.AddPage("Gacha", BuildTabGacha(), true, false)
 	TabPages.AddPage("Dissolve", BuildTabDissolve(), true, false)
 
@@ -66,9 +63,15 @@ func StartApp() {
 		SetRegions(true).
 		SetTextAlign(tview.AlignCenter)
 
+	updateHeader := func(expStr string) {
+		fmt.Fprintf(header, ` ["F1"][yellow][F1] Battler[""]  ["F2"][green][F2] Gacha[""]  ["F3"][red][F3] Batch Dissolve[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, expStr)
+	}
+
 	// Decode JWT Payload for Expiration
 	jwtStr := os.Getenv("BEARER_TOKEN")
 	jwtExp := "Unknown"
+	isValid := false
+
 	parts := strings.Split(jwtStr, ".")
 	if len(parts) >= 2 {
 		if b, err := base64.RawURLEncoding.DecodeString(parts[1]); err == nil {
@@ -77,17 +80,90 @@ func StartApp() {
 			}
 			if err := json.Unmarshal(b, &payload); err == nil && payload.Exp > 0 {
 				jwtExp = time.Unix(payload.Exp, 0).Format(time.RFC822)
+				if payload.Exp > time.Now().Unix() {
+					isValid = true
+				}
 			}
 		}
 	}
 
-	fmt.Fprintf(header, ` ["F1"][yellow][F1] The Grinder[""]  ["F2"][green][F2] Gacha Bomb[""]  ["F3"][red][F3] Batch Dissolve[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, jwtExp)
+	updateHeader(jwtExp)
+
+	continueBootSequence := func() {
+		go func() {
+			log.Println("[INFO] Fetching FTUE and Event Stages...")
+			if err := models.FetchStages(client); err != nil {
+				log.Printf("[ERROR] Critical Failure ingesting JSON stage metadata arrays: %v\n", err)
+			}
+			log.Println("[INFO] Fetching Dictionaries...")
+			models.EnrichStages(client)
+			api.EnrichCurrencies(client)
+		}()
+	}
+
+	if !isValid {
+		form := tview.NewForm().
+			AddButton("1. Generate Certificate", func() {
+				log.Println("[INFO] Generating Certificate...")
+				api.GenerateCertificateNatively()
+			}).
+			AddButton("2. Start Proxy", func() {
+				TabPages.HidePage("AuthModal")
+				App.SetFocus(TabPages)
+				log.Println("[INFO] Booting Background Proxy on :8080...")
+				go api.StartProxyRoutine("8080", func(newToken string) {
+					// Callback when proxy catches the login!
+					os.Setenv("BEARER_TOKEN", newToken)
+					client.BearerToken = newToken
+
+					App.QueueUpdateDraw(func() {
+						header.Clear()
+						fmt.Fprintf(header, " [green]Authentication Successful! Restarting TUI...")
+
+						go func() {
+							time.Sleep(1 * time.Second)
+							NeedsRestart = true
+							App.Stop()
+						}()
+					})
+				})
+			})
+
+		form.SetBorder(true).
+			SetTitle(" Authentication Missing or Expired! ").
+			SetTitleAlign(tview.AlignCenter)
+
+		helpText := tview.NewTextView().
+			SetDynamicColors(true).
+			SetText("[red]Authentication Missing or Expired![white]\n\n" +
+				"If you have not installed the Trusted Root Cert, click [yellow]Generate Certificate[white].\n" +
+				"Double click the ca.cer file in your folder to install it.\n\n" +
+				"Once installed, click [yellow]Start Proxy[white] and set your Windows proxy to 127.0.0.1:8080.\n" +
+				"Log into the game to automatically intercept your token!")
+
+		flex := tview.NewFlex().
+			SetDirection(tview.FlexRow).
+			AddItem(helpText, 10, 1, false).
+			AddItem(form, 5, 1, true)
+
+		modalLayout := tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(flex, 15, 1, true).
+				AddItem(nil, 0, 1, false), 80, 1, true).
+			AddItem(nil, 0, 1, false)
+
+		TabPages.AddPage("AuthModal", modalLayout, true, true)
+	} else {
+		continueBootSequence()
+	}
 
 	header.SetHighlightedFunc(func(added, removed, clear []string) {
 		if len(added) > 0 {
 			switch added[0] {
 			case "F1":
-				TabPages.SwitchToPage("Grinder")
+				TabPages.SwitchToPage("Battler")
 			case "F2":
 				TabPages.SwitchToPage("Gacha")
 			case "F3":
@@ -101,7 +177,7 @@ func StartApp() {
 	// Global Application Input capturing for Tab Navigation
 	App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyF1 {
-			TabPages.SwitchToPage("Grinder")
+			TabPages.SwitchToPage("Battler")
 			return nil
 		} else if event.Key() == tcell.KeyF2 {
 			TabPages.SwitchToPage("Gacha")

@@ -8,13 +8,13 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
-	"strconv"
 )
 
 func ExtractGachaLootRecursively(data interface{}) map[string]int {
-	loot := make(map[string]int) 
+	loot := make(map[string]int)
 	var walk func(v interface{})
 	walk = func(v interface{}) {
 		switch val := v.(type) {
@@ -22,7 +22,7 @@ func ExtractGachaLootRecursively(data interface{}) map[string]int {
 			var itemType string
 			var id int
 			var ok bool
-			
+
 			if tid, found := val["tradableId"].(float64); found {
 				itemType = "tradable"
 				id = int(tid)
@@ -35,6 +35,10 @@ func ExtractGachaLootRecursively(data interface{}) map[string]int {
 				itemType = "currency"
 				id = int(curId)
 				ok = true
+			} else if eqId, found := val["equipmentId"].(float64); found {
+				itemType = "equipment"
+				id = int(eqId)
+				ok = true
 			}
 
 			if ok {
@@ -45,7 +49,7 @@ func ExtractGachaLootRecursively(data interface{}) map[string]int {
 				key := fmt.Sprintf("%s:%d", itemType, id)
 				loot[key] += amt
 			}
-			
+
 			for _, v := range val {
 				walk(v)
 			}
@@ -96,7 +100,7 @@ var CachedBanners []GachaBanner
 
 func FetchBanners(client *OverlewdClient) error {
 	log.Println("[INFO] Fetching Gacha Banners...")
-	
+
 	b, err := LoadOrFetch("/gacha", "gacha.json", client)
 	if err != nil {
 		return fmt.Errorf("failed to load banners: %w", err)
@@ -127,7 +131,7 @@ func GachaSpamLoop(ctx context.Context, client *OverlewdClient, bannerID int, am
 	var mu sync.Mutex
 	globalLootMap := make(map[string]int)
 	var failedSpins int
-	
+
 	reportProgress := func(msg string) {
 		if onProgress != nil {
 			onProgress(msg)
@@ -201,16 +205,16 @@ Loop:
 
 	wg.Wait()
 	log.Println("[GACHA] Completed all requested spins!")
-	reportProgress(fmt.Sprintf("[GACHA] Finished dispatching %d sweeps!", amount))
+	reportProgress(fmt.Sprintf("[GACHA] Finished batch of %d spins.", amount))
 
 	if len(globalLootMap) > 0 || failedSpins > 0 {
 		type SortableLoot struct {
-			Key      string
-			Name     string
-			Rarity   string
-			Amount   int
-			Rank     int
-			Color    string
+			Key    string
+			Name   string
+			Rarity string
+			Amount int
+			Rank   int
+			Color  string
 		}
 
 		var finalLoot []SortableLoot

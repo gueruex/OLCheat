@@ -33,8 +33,6 @@ var CachedBattles []Stage
 
 // FetchStages requests both stage pools using our customized client.
 func FetchStages(client *api.OverlewdClient) error {
-	log.Println("[INFO] Fetching FTUE and Event Stages...")
-
 	var allStages []Stage
 
 	// Fetch FTUE Stages

@@ -46,8 +46,6 @@ type BattleDict struct {
 
 // EnrichStages downloads auxiliary dictionaries from the game and maps the unintuitive DB stage arrays over to human readable contexts!
 func EnrichStages(client *api.OverlewdClient) {
-	log.Println("[INFO] Fetching Dictionaries for human-readable stage names...")
-
 	// 1. Fetch FTUE (Main Campaign Map)
 	var ftue FTUEResponse
 	if b, err := api.LoadOrFetch("/ftue", "ftue.json", client); err == nil {

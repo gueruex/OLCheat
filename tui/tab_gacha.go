@@ -11,6 +11,7 @@ import (
 
 func BuildTabGacha() *tview.Flex {
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	flex.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	localClient := api.NewClient("https://prod.api.overlewd.ru")
 
 	// Left: Banners List
@@ -21,16 +22,16 @@ func BuildTabGacha() *tview.Flex {
 
 	// Right: Controls
 	rightPanel := tview.NewFlex().SetDirection(tview.FlexRow)
-	
+
 	disclaimer := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("\n[red]WARNING: Gacha runs on real currencies. Make sure you have enough to complete at least 1 spin before starting!").
+		SetText("\n[red]WARNING: Make sure you have enough to complete at least 1 spin before starting!").
 		SetTextAlign(tview.AlignCenter)
 
 	infoDisplay := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("\n[yellow]Currently Selected: None\n")
-		
+
 	statusDisplay := tview.NewTextView().
 		SetDynamicColors(true).
 		SetMaxLines(500).
@@ -92,8 +93,6 @@ func BuildTabGacha() *tview.Flex {
 		api.RemoveCacheFile("gacha.json")
 		reloadBanners()
 	})
-	
-
 
 	form.AddButton("Spin Selected", func() {
 		if selectedBannerID == -1 {
@@ -111,14 +110,14 @@ func BuildTabGacha() *tview.Flex {
 		resultsView.SetText("[yellow]Processing background roll loop... Please wait...")
 
 		go func() {
-			api.GachaSpamLoop(context.Background(), localClient, selectedBannerID, amount, 
+			api.GachaSpamLoop(context.Background(), localClient, selectedBannerID, amount,
 				func(progressMsg string) {
 					App.QueueUpdateDraw(func() {
 						current := statusDisplay.GetText(true)
 						statusDisplay.SetText(progressMsg + "\n" + current)
 						statusDisplay.ScrollToBeginning()
 					})
-				}, 
+				},
 				func(resultMsg string) {
 					App.QueueUpdateDraw(func() {
 						resultsView.SetText(resultMsg)
@@ -129,7 +128,7 @@ func BuildTabGacha() *tview.Flex {
 	})
 
 	form.SetBorder(true).SetTitle(" Gacha Settings ")
-	
+
 	rightPanel.AddItem(form, 0, 1, false)
 	rightPanel.AddItem(descView, 10, 0, false)
 	rightPanel.AddItem(disclaimer, 5, 0, false)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/elazarl/goproxy"
 )
@@ -21,48 +22,42 @@ func waitAndExit() {
 	os.Exit(1)
 }
 
-func checkCaCert() {
-	if _, err := os.Stat("ca.pem"); os.IsNotExist(err) {
+func GenerateCertificateNatively() {
+	if _, err := os.Stat("ca.cer"); os.IsNotExist(err) {
 		cert := goproxy.GoproxyCa.Certificate[0]
-		out, err := os.Create("ca.pem")
+		out, err := os.Create("ca.cer")
 		if err != nil {
-			log.Printf("Error creating ca.pem: %v", err)
-			waitAndExit()
+			log.Printf("Error creating ca.cer: %v", err)
+			return
 		}
 		defer out.Close()
 		if err := pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: cert}); err != nil {
-			log.Printf("Error encoding ca.pem: %v", err)
-			waitAndExit()
+			log.Printf("Error encoding ca.cer: %v", err)
+			return
 		}
-		log.Println("----------------- ACTION REQUIRED -----------------")
-		log.Println("I just generated 'ca.pem' in the current directory.")
-		log.Println("You MUST install and trust this as a root CA on your")
-		log.Println("device or emulator. Without it, the game's HTTPS")
-		log.Println("traffic will fail and we won't capture anything.")
-		log.Println("After installing it, start this proxy again.")
-		waitAndExit()
+		log.Println("[INFO] Successfully Generated 'ca.cer' in the execution folder.")
+	} else {
+		log.Println("[INFO] 'ca.cer' already exists natively.")
 	}
 }
 
 var savedMetadata bool
 
-func StartProxy(port string) {
-	checkCaCert()
-
+func StartProxyRoutine(port string, onSuccess func(string)) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: proxy,
+	}
 
 	// Dump Intercepted Requests and Harvest Metadata
 	proxy.OnRequest().DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			host := r.Host
 			if strings.Contains(host, "cdn.overlewd.com") || strings.Contains(host, "prod.api.overlewd.ru") {
-				path := r.URL.Path
-				if path == "" {
-					path = "/"
-				}
-
 				if !savedMetadata {
 					version := r.Header.Get("Version")
 					unityVer := r.Header.Get("X-Unity-Version")
@@ -78,6 +73,8 @@ func StartProxy(port string) {
 			}
 			return r, nil
 		})
+
+	var authSync sync.Once
 
 	proxy.OnResponse().DoFunc(
 		func(r *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -96,8 +93,16 @@ func StartProxy(port string) {
 						AccessToken string `json:"accessToken"`
 					}
 					if err := json.Unmarshal(bodyBytes, &respData); err == nil && respData.AccessToken != "" {
-						log.Printf("[DEBUG] Successfully parsed accessToken.")
-						upsertEnv("BEARER_TOKEN", respData.AccessToken)
+						authSync.Do(func() {
+							log.Printf("[DEBUG] Successfully parsed accessToken.")
+							upsertEnv("BEARER_TOKEN", respData.AccessToken)
+							
+							if onSuccess != nil {
+								go onSuccess(respData.AccessToken)
+							}
+							// Shutdown server gracefully
+							go server.Close()
+						})
 					} else {
 						log.Printf("[ERROR] Failed to unmarshal /auth/login accessToken: %v", err)
 					}
@@ -111,14 +116,15 @@ func StartProxy(port string) {
 		})
 
 	log.Printf("Starting MITM proxy on :%s\n", port)
-	if err := http.ListenAndServe(":"+port, proxy); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Printf("Failed to start proxy on port %s (is the port already in use?): %v", port, err)
 		waitAndExit()
 	}
 }
 
 func upsertEnv(key, value string) {
-	b, _ := os.ReadFile(".env")
+	envPath := GetEnvPath()
+	b, _ := os.ReadFile(envPath)
 	lines := strings.Split(string(b), "\n")
 
 	var out []string
@@ -137,7 +143,7 @@ func upsertEnv(key, value string) {
 	}
 
 	content := strings.Join(out, "\n") + "\n"
-	err := os.WriteFile(".env", []byte(content), 0644)
+	err := os.WriteFile(envPath, []byte(content), 0644)
 	if err != nil {
 		log.Printf("Error writing %s to .env: %v", key, err)
 	} else {
