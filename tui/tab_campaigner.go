@@ -203,11 +203,12 @@ func BuildTabCampaigner() *tview.Flex {
 			activeStages = stages
 			for i, stg := range stages {
 				col := ""
-				if stg.Status == "complete" || stg.Status == "completed" {
+				switch stg.Status {
+				case "complete", "completed":
 					col = "[green]"
-				} else if stg.Status == "open" || stg.Status == "available" {
+				case "open", "available":
 					col = "[yellow]"
-				} else {
+				default:
 					col = "[red]"
 				}
 				

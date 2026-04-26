@@ -228,13 +228,17 @@ Loop:
 			id, _ := strconv.Atoi(parts[1])
 
 			var name, rarity string
-			if itemType == "character" {
+			switch itemType {
+			case "character":
 				name = GetCharacterName(id)
-				rarity = GetItemRarity(id)
-			} else {
+			case "tradable":
+				name = GetTradableName(id)
+			case "equipment":
+				name = fmt.Sprintf("Equipment (Model %d)", id)
+			default:
 				name = GetCurrencyName(id)
-				rarity = GetItemRarity(id)
 			}
+			rarity = GetItemRarity(id)
 
 			rank := 0
 			color := "white"

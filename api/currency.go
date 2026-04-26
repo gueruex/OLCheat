@@ -26,15 +26,19 @@ type CurrencyNode struct {
 	Name        string                 `json:"name"`
 	Rarity      string                 `json:"rarity"`
 	Key         string                 `json:"key"`
-	Description string                 `json:"description"`
-	ItemPack    []TradableItemPackNode `json:"itemPack"`
-	Price       TradablePriceBlock     `json:"price"`
+	Description  string                 `json:"description"`
+	ItemPack     []TradableItemPackNode `json:"itemPack"`
+	Price        TradablePriceBlock     `json:"price"`
+	CurrentCount int                    `json:"currentCount"`
+	Limit        *int                   `json:"limit"`
 }
 
 type TradableDetails struct {
-	Description string
-	PriceString string
-	Includes    []TradableItemPackNode
+	Name           string
+	Description    string
+	PriceString    string
+	Includes       []TradableItemPackNode
+	HideFromMarket bool
 }
 
 var (
@@ -63,14 +67,21 @@ func EnrichCurrencies(client *OverlewdClient) {
 
 		cacheMutex.Lock()
 		for _, n := range nodes {
-			if endpoint == "/battles/characters" {
+			switch endpoint {
+			case "/battles/characters":
 				CharacterCache[n.ID] = n.Name
-			} else {
+			case "/tradable":
+				// Don't merge Tradable IDs into Currency Cache! They use independent integer spaces.
+			default:
 				CurrencyCache[n.ID] = n.Name
-				if n.Rarity != "" {
-					RarityCache[n.ID] = n.Rarity
-				}
-				if endpoint == "/tradable" {
+			}
+			
+			if n.Rarity != "" {
+				RarityCache[n.ID] = n.Rarity
+			}
+			
+			if endpoint == "/tradable" {
+					var hide bool
 					priceStr := "Free"
 					if len(n.Price.Price) > 0 {
 						p := n.Price.Price[0]
@@ -83,6 +94,14 @@ func EnrichCurrencies(client *OverlewdClient) {
 						
 						if cName == "US Dollar Cent" {
 							priceStr = fmt.Sprintf("%.2f USD", float64(p.Amount)/100.0)
+							var maxed bool
+							if n.Limit != nil && n.CurrentCount >= *n.Limit {
+								maxed = true
+							}
+							
+							if p.Amount > 0 || maxed {
+								hide = true
+							}
 						} else {
 							priceStr = fmt.Sprintf("%d %s", p.Amount, cName)
 						}
@@ -92,12 +111,13 @@ func EnrichCurrencies(client *OverlewdClient) {
 						desc = "No description provided."
 					}
 					TradableCache[n.ID] = TradableDetails{
-						Description: desc,
-						PriceString: priceStr,
-						Includes:    n.ItemPack,
+						Name:           n.Name,
+						Description:    desc,
+						PriceString:    priceStr,
+						Includes:       n.ItemPack,
+						HideFromMarket: hide,
 					}
 				}
-			}
 		}
 		cacheMutex.Unlock()
 		log.Printf("[INFO] Pushed %d items from [%s] into Dictionary.", len(nodes), endpoint)
@@ -146,7 +166,23 @@ func GetTradableDetails(id int) TradableDetails {
 		return details
 	}
 	return TradableDetails{
+		Name:        fmt.Sprintf("Unknown Item [%d]", id),
 		Description: "No description provided.",
 		PriceString: "Unknown Price",
 	}
+}
+
+func GetTradableName(id int) string {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
+	if details, exists := TradableCache[id]; exists {
+		return details.Name
+	}
+	
+	// Fallback to CurrencyCache if somehow a raw currency was pushed as a market target
+	if name, exists := CurrencyCache[id]; exists {
+		return name
+	}
+	
+	return fmt.Sprintf("Unknown Item [%d]", id)
 }

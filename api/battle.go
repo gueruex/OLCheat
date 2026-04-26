@@ -64,12 +64,16 @@ func WorkerLoop(ctx context.Context, client *OverlewdClient, endpoint string, st
 					parts := strings.Split(key, ":")
 					if len(parts) == 2 {
 						id, _ := strconv.Atoi(parts[1])
-						name := GetCurrencyName(id)
+						var name string
 						switch parts[0] {
 						case "character":
-							name = fmt.Sprintf("Character %d", id)
+							name = GetCharacterName(id)
+						case "tradable":
+							name = GetTradableName(id)
 						case "equipment":
 							name = fmt.Sprintf("Equipment Item %d", id)
+						default:
+							name = GetCurrencyName(id)
 						}
 						earned = append(earned, fmt.Sprintf("[white]%dx [green]%s[white]", amt, name))
 					}

@@ -62,11 +62,18 @@ func StartProxyRoutine(port string, onSuccess func(string)) {
 					version := r.Header.Get("Version")
 					unityVer := r.Header.Get("X-Unity-Version")
 					ua := r.Header.Get("User-Agent")
+					deviceId := r.Header.Get("X-Device-Id")
+					if deviceId == "" {
+						deviceId = r.Header.Get("Device-Id")
+					}
 
 					if version != "" && unityVer != "" && ua != "" {
 						upsertEnv("APP_VERSION", version)
 						upsertEnv("UNITY_VERSION", unityVer)
 						upsertEnv("USER_AGENT", ua)
+						if deviceId != "" {
+							upsertEnv("DEVICE_ID", deviceId)
+						}
 						savedMetadata = true
 					}
 				}

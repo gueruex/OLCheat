@@ -70,7 +70,7 @@ func BuildTabGrinder() tview.Primitive {
 						stgNode := tview.NewTreeNode(stgText).
 							SetSelectable(true).
 							SetReference(stg).
-							SetColor(tview.Styles.ContrastBackgroundColor) 
+							SetColor(tview.Styles.ContrastBackgroundColor)
 						chapNode.AddChild(stgNode)
 					}
 				}
@@ -101,9 +101,9 @@ func BuildTabGrinder() tview.Primitive {
 		} else {
 			// This is a leaf node (Stage)
 			GlobalTargetStage = ref.(*models.Stage)
-			lblTarget.SetText(fmt.Sprintf("\n  Target: [green]%s -> %s -> %s\n", 
-				GlobalTargetStage.ReadableCategory, 
-				GlobalTargetStage.ReadableChapter, 
+			lblTarget.SetText(fmt.Sprintf("\n  Target: [green]%s -> %s -> %s\n",
+				GlobalTargetStage.ReadableCategory,
+				GlobalTargetStage.ReadableChapter,
 				GlobalTargetStage.Name))
 		}
 	})
@@ -118,7 +118,7 @@ func BuildTabGrinder() tview.Primitive {
 		// Create a localized snapshot scope for loop variables
 		slotForm := tview.NewForm()
 		currentSlotID := i
-		
+
 		assignClosure := func(lbl *tview.TextView) func() {
 			return func() {
 				if GlobalTargetStage != nil {
@@ -143,13 +143,13 @@ func BuildTabGrinder() tview.Primitive {
 						lbl.SetText("\n[red]No valid target assigned!")
 						return
 					}
-					
+
 					ctx, cancelFunc := context.WithCancel(context.Background())
 					slotCancels[slot] = cancelFunc
-					
+
 					form.GetButton(1).SetLabel("Stop (Running)")
 					lbl.SetText(fmt.Sprintf("\n[green]Grinding:[white] %s -> %s", target.ReadableChapter, target.Name))
-					
+
 					go api.WorkerLoop(ctx, localClient, target.Endpoint, target.ID, slot)
 				}
 			}
@@ -180,13 +180,13 @@ func BuildTabGrinder() tview.Primitive {
 					rText += "\n[yellow]  *** First Clear Rewards ***\n"
 				}
 				for _, rw := range stg.FirstRewards {
-					rText += fmt.Sprintf("  - [white]%dx[green] %s [yellow](%.1f%%)\n", rw.Amount, api.GetCurrencyName(rw.TradableID), rw.Probability*100)
+					rText += fmt.Sprintf("  - [white]%dx[green] %s [yellow](%.1f%%)\n", rw.Amount, api.GetTradableName(rw.TradableID), rw.Probability*100)
 				}
 			}
 			if len(stg.Rewards) > 0 {
 				rText += "\n[white]  *** Farming Drops ***\n"
 				for _, rw := range stg.Rewards {
-					rText += fmt.Sprintf("  - [white]%dx[green] %s [gray](%.1f%%)\n", rw.Amount, api.GetCurrencyName(rw.TradableID), rw.Probability*100)
+					rText += fmt.Sprintf("  - [white]%dx[green] %s [gray](%.1f%%)\n", rw.Amount, api.GetTradableName(rw.TradableID), rw.Probability*100)
 				}
 			}
 			if rText == "" {
@@ -202,7 +202,7 @@ func BuildTabGrinder() tview.Primitive {
 	controlForm.AddButton("Update Stages", func() {
 		root.ClearChildren()
 		root.AddChild(tview.NewTreeNode("[yellow]Fetching Stages from Network... Please Wait...").SetSelectable(false))
-		
+
 		go func() {
 			endpoints := []struct {
 				Ep string
@@ -234,11 +234,11 @@ func BuildTabGrinder() tview.Primitive {
 			} else {
 				log.Printf("[green]Successfully updated %d files on the network block.[white]", successCount)
 			}
-			
+
 			// Force reload into ram
 			models.FetchStages(localClient)
 			models.EnrichStages(localClient)
-			
+
 			App.QueueUpdateDraw(func() {
 				reloadTree()
 			})
@@ -255,18 +255,27 @@ func BuildTabGrinder() tview.Primitive {
 				return
 			}
 			defer resp.Body.Close()
-			
+
 			var data struct {
 				Wallet []struct {
 					CurrencyID int `json:"currencyId"`
 					Amount     int `json:"amount"`
 				} `json:"wallet"`
+				Potions []struct {
+					ID    int `json:"id"`
+					Count int `json:"count"`
+				} `json:"potions"`
+				WalletEvent []struct {
+					CurrencyID int `json:"currencyId"`
+					Amount     int `json:"amount"`
+				} `json:"walletEvent"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 				log.Printf("[ERROR] JSON parse failure on /me: %v", err)
 				return
 			}
 
+			// 1. Core Wallet mapping
 			targetIDs := map[int]string{
 				22: "Wood",
 				66: "Stone",
@@ -277,9 +286,8 @@ func BuildTabGrinder() tview.Primitive {
 				84: "Free Summon Runes",
 				83: "Sacred Runes",
 			}
-			
 			order := []int{22, 66, 25, 65, 3, 24, 84, 83}
-			
+
 			output := "[white]===============\n[magenta]Current Resources[white]\n===============\n\n"
 			for _, id := range order {
 				amt := 0
@@ -289,10 +297,42 @@ func BuildTabGrinder() tview.Primitive {
 						break
 					}
 				}
-				output += fmt.Sprintf(" [yellow]%-18s[white] %d\n", targetIDs[id]+":", amt)
+				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", targetIDs[id]+":", amt)
+			}
+
+			// 2. Potions mapping
+			potionIDs := map[int]string{
+				1:  "Health Potion",
+				2:  "Mana Potion",
+				3:  "Energy Potion",
+				4:  "Skip Scroll",
+				34: "Dating Energy Potion",
+			}
+			potOrder := []int{1, 2, 3, 4, 34}
+			output += "\n[magenta]Consumables[white]\n===============\n\n"
+			for _, id := range potOrder {
+				amt := 0
+				for _, p := range data.Potions {
+					if p.ID == id {
+						amt = p.Count
+						break
+					}
+				}
+				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", potionIDs[id]+":", amt)
+			}
+
+			// 3. Event mapping dynamically
+			output += "\n[magenta]Event Currencies[white]\n===============\n\n"
+			foundEvent := false
+			for _, e := range data.WalletEvent {
+				foundEvent = true
+				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", api.GetCurrencyName(e.CurrencyID)+":", e.Amount)
+			}
+			if !foundEvent {
+				output += " [gray]No active event currencies.\n"
 			}
 			output += "\n"
-			
+
 			App.QueueUpdateDraw(func() {
 				modal := tview.NewModal().
 					SetText(output).

@@ -17,6 +17,7 @@ type OverlewdClient struct {
 	AppVersion   string
 	UnityVersion string
 	UserAgent    string
+	DeviceID     string
 }
 
 var (
@@ -35,6 +36,7 @@ func NewClient(baseURL string) *OverlewdClient {
 		AppVersion:   os.Getenv("APP_VERSION"),
 		UnityVersion: os.Getenv("UNITY_VERSION"),
 		UserAgent:    os.Getenv("USER_AGENT"),
+		DeviceID:     os.Getenv("DEVICE_ID"),
 	}
 }
 
@@ -50,6 +52,10 @@ func (c *OverlewdClient) prepareRequest(req *http.Request) {
 	}
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	if c.DeviceID != "" {
+		req.Header.Set("X-Device-Id", c.DeviceID)
+		req.Header.Set("Device-Id", c.DeviceID)
 	}
 	req.Header.Set("Accept", "*/*")
 }
