@@ -275,61 +275,41 @@ func BuildTabGrinder() tview.Primitive {
 				return
 			}
 
-			// 1. Core Wallet mapping
-			targetIDs := map[int]string{
-				22: "Wood",
-				66: "Stone",
-				25: "Silver",
-				65: "Gems",
-				3:  "Crystals",
-				24: "Magic Spheres",
-				84: "Free Summon Runes",
-				83: "Sacred Runes",
-			}
-			order := []int{22, 66, 25, 65, 3, 24, 84, 83}
-
+			// 1. Core Wallet (dynamically resolved)
 			output := "[white]===============\n[magenta]Current Resources[white]\n===============\n\n"
-			for _, id := range order {
-				amt := 0
-				for _, w := range data.Wallet {
-					if w.CurrencyID == id {
-						amt = w.Amount
-						break
-					}
-				}
-				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", targetIDs[id]+":", amt)
+			for _, w := range data.Wallet {
+				name := api.GetCurrencyName(w.CurrencyID)
+				output += fmt.Sprintf(" [yellow]%-25s[white] %12d\n", name+":", w.Amount)
 			}
 
-			// 2. Potions mapping
-			potionIDs := map[int]string{
-				1:  "Health Potion",
-				2:  "Mana Potion",
-				3:  "Energy Potion",
-				4:  "Skip Scroll",
-				34: "Dating Energy Potion",
-			}
-			potOrder := []int{1, 2, 3, 4, 34}
+			// Fetch global potions to map names dynamically
+			globalPotions, _ := api.FetchGlobalPotions(localClient)
+
+			// 2. Potions (dynamically resolved)
 			output += "\n[magenta]Consumables[white]\n===============\n\n"
-			for _, id := range potOrder {
-				amt := 0
+			if len(data.Potions) == 0 {
+				output += " [gray]No potions in inventory.\n"
+			} else {
 				for _, p := range data.Potions {
-					if p.ID == id {
-						amt = p.Count
-						break
+					name := fmt.Sprintf("Potion %d", p.ID)
+					for _, gp := range globalPotions {
+						if gp.ID == p.ID {
+							name = gp.Name
+							break
+						}
 					}
+					output += fmt.Sprintf(" [yellow]%-25s[white] %12d\n", name+":", p.Count)
 				}
-				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", potionIDs[id]+":", amt)
 			}
 
-			// 3. Event mapping dynamically
+			// 3. Event currencies (dynamically resolved)
 			output += "\n[magenta]Event Currencies[white]\n===============\n\n"
-			foundEvent := false
-			for _, e := range data.WalletEvent {
-				foundEvent = true
-				output += fmt.Sprintf(" [yellow]%-20s[white] %d\n", api.GetCurrencyName(e.CurrencyID)+":", e.Amount)
-			}
-			if !foundEvent {
+			if len(data.WalletEvent) == 0 {
 				output += " [gray]No active event currencies.\n"
+			} else {
+				for _, e := range data.WalletEvent {
+					output += fmt.Sprintf(" [yellow]%-25s[white] %12d\n", api.GetCurrencyName(e.CurrencyID)+":", e.Amount)
+				}
 			}
 			output += "\n"
 

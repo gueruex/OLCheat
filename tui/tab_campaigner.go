@@ -336,5 +336,8 @@ func BuildTabCampaigner() *tview.Flex {
 	flex.AddItem(stgList, 0, 2, false) // Expanded list ratio
 	flex.AddItem(rightPane, 0, 3, false) // Expanded dash ratio
 
+	// Auto-load campaign maps on tab initialization
+	reloadCampaigns()
+
 	return flex
 }

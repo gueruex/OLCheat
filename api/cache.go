@@ -26,14 +26,37 @@ func GetEnvPath() string {
 	return filepath.Join(getCacheDir(), ".env")
 }
 
-// EnsureCacheWiped wipes the entire ./olcheat appcache
+// EnsureCacheWiped wipes the entire ./olcheat appcache but preserves .env
 func EnsureCacheWiped() {
 	targetDir := getCacheDir()
 	if targetDir != "" {
+		envPath := filepath.Join(targetDir, ".env")
+		envData, err := os.ReadFile(envPath)
+
 		os.RemoveAll(targetDir)
 		os.MkdirAll(targetDir, 0755)
+
+		if err == nil {
+			os.WriteFile(envPath, envData, 0644)
+		}
+
 		log.Println("[CACHE] Successfully obliterated all cached dictionaries and definitions.")
 	}
+}
+
+// WipeAuthCredentials completely deletes the .env configuration and unsets active session memory
+func WipeAuthCredentials() {
+	targetDir := getCacheDir()
+	if targetDir != "" {
+		envPath := filepath.Join(targetDir, ".env")
+		os.Remove(envPath)
+	}
+	os.Remove(".env")
+	os.Unsetenv("BEARER_TOKEN")
+	os.Unsetenv("DEVICE_ID")
+	os.Unsetenv("USER_AGENT")
+	os.Unsetenv("APP_VERSION")
+	os.Unsetenv("UNITY_VERSION")
 }
 
 // RemoveCacheFile wipes precisely one specific explicit cache file out of the OS target directory natively

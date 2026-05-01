@@ -24,12 +24,6 @@ func BuildTabGacha() *tview.Flex {
 
 	// Right: Controls
 	rightPanel := tview.NewFlex().SetDirection(tview.FlexRow)
-
-	disclaimer := tview.NewTextView().
-		SetDynamicColors(true).
-		SetText("\n[red]WARNING: Make sure you have enough to complete at least 1 spin before starting!").
-		SetTextAlign(tview.AlignCenter)
-
 	infoDisplay := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("\n[yellow]Currently Selected: None\n")
@@ -135,7 +129,6 @@ func BuildTabGacha() *tview.Flex {
 
 	rightPanel.AddItem(form, 0, 1, false)
 	rightPanel.AddItem(descView, 10, 0, false)
-	rightPanel.AddItem(disclaimer, 5, 0, false)
 	rightPanel.AddItem(infoDisplay, 4, 0, false)
 	rightPanel.AddItem(statusDisplay, 0, 2, false)
 

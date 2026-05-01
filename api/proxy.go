@@ -101,7 +101,6 @@ func StartProxyRoutine(port string, onSuccess func(string)) {
 					}
 					if err := json.Unmarshal(bodyBytes, &respData); err == nil && respData.AccessToken != "" {
 						authSync.Do(func() {
-							log.Printf("[DEBUG] Successfully parsed accessToken.")
 							upsertEnv("BEARER_TOKEN", respData.AccessToken)
 
 							if onSuccess != nil {
@@ -113,7 +112,7 @@ func StartProxyRoutine(port string, onSuccess func(string)) {
 					} else {
 						log.Printf("[ERROR] Failed to unmarshal /auth/login accessToken: %v", err)
 					}
-					log.Printf("===================================================")
+
 				} else {
 					log.Printf("[ERROR] Failed to read response body for /auth/login: %v", err)
 				}

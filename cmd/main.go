@@ -30,7 +30,6 @@ func main() {
 		
 		if !tui.NeedsRestart {
 			// Clean user-directed shut down
-			os.WriteFile("graceful_shutdown.log", []byte(fmt.Sprintf("Application structurally exited cleanly! NeedsRestart=false. Is the terminal silently closing the channel natively?")), 0644)
 			break
 		}
 	}

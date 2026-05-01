@@ -13,8 +13,10 @@ import (
 var MarketCache []api.Market
 
 func BuildTabMarket() *tview.Flex {
-	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	flex.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	rootFlex.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+
+	topFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	localClient := api.NewClient("https://prod.api.overlewd.ru")
 
 	// --- LEFT PANE (MARKET NAVIGATOR) ---
@@ -149,20 +151,62 @@ func BuildTabMarket() *tview.Flex {
 	}
 	reloadTree()
 
+	var globalPotions []api.GlobalPotion
+	var myPotions []api.MyPotion
+	
+	buyDropdown := tview.NewDropDown().
+		SetLabel("Potion to Buy: ").
+		SetOptions([]string{"Hit 'Fetch Markets' to load..."}, nil)
+	
+	useDropdown := tview.NewDropDown().
+		SetLabel("Potion to Use: ").
+		SetOptions([]string{"Hit 'Fetch Markets' to load..."}, nil)
+
 	form := tview.NewForm()
 
-	form.AddButton("Fetch Markets", func() {
-		lblTarget.SetText("\n  [yellow]Fetching markets...")
+	form.AddButton("Fetch Markets & Potions", func() {
+		lblTarget.SetText("\n  [yellow]Fetching markets and syncing inventory...")
 		go func() {
 			markets, err := api.FetchMarkets(localClient)
+			gPots, _ := api.FetchGlobalPotions(localClient)
+			mPots, _ := api.FetchMyPotions(localClient)
+			
 			App.QueueUpdateDraw(func() {
 				if err != nil {
 					lblTarget.SetText("\n  [red]Error: " + err.Error())
 					return
 				}
 				MarketCache = markets
+				globalPotions = gPots
+				myPotions = mPots
+				
+				var buyOpts []string
+				for _, p := range globalPotions {
+					buyOpts = append(buyOpts, fmt.Sprintf("[%d] %s", p.ID, p.Name))
+				}
+				if len(buyOpts) > 0 {
+					buyDropdown.SetOptions(buyOpts, nil)
+					buyDropdown.SetCurrentOption(0)
+				}
+				
+				var useOpts []string
+				for _, p := range myPotions {
+					name := "Unknown Potion"
+					for _, gp := range globalPotions {
+						if gp.ID == p.ID {
+							name = gp.Name
+							break
+						}
+					}
+					useOpts = append(useOpts, fmt.Sprintf("[%d] %s (Inventory: %d)", p.ID, name, p.Count))
+				}
+				if len(useOpts) > 0 {
+					useDropdown.SetOptions(useOpts, nil)
+					useDropdown.SetCurrentOption(0)
+				}
+
 				reloadTree()
-				lblTarget.SetText("\n  [green]Markets Successfully Hydrated!\n")
+				lblTarget.SetText("\n  [green]Markets and Potions Successfully Hydrated!\n")
 			})
 		}()
 	})
@@ -235,7 +279,95 @@ func BuildTabMarket() *tview.Flex {
 	rightPane.AddItem(form, 9, 0, true)
 	rightPane.AddItem(statusLog, 0, 1, false)
 
-	flex.AddItem(treeView, 0, 1, false)
-	flex.AddItem(rightPane, 0, 1, true)
-	return flex
+	topFlex.AddItem(treeView, 0, 1, false)
+	topFlex.AddItem(rightPane, 0, 1, true)
+
+	// --- BOTTOM PANE (POTIONS BULK BUY/USE) ---
+	bottomFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	
+	// POTIONS BUY FORM
+	buyForm := tview.NewForm()
+	buyForm.SetBorder(true).SetTitle(" Bulk Buy Potions ")
+	
+	buyForm.AddFormItem(buyDropdown)
+
+	inputBuyAmt := tview.NewInputField().
+		SetLabel("Amount to Buy: ").
+		SetFieldWidth(10).
+		SetText("10").
+		SetAcceptanceFunc(tview.InputFieldInteger)
+	buyForm.AddFormItem(inputBuyAmt)
+
+	buyForm.AddButton("BUY POTIONS", func() {
+		idx, _ := buyDropdown.GetCurrentOption()
+		if len(globalPotions) == 0 || idx < 0 || idx >= len(globalPotions) {
+			statusLog.SetText(statusLog.GetText(false) + "\n  [red]Error: You must fetch markets first or select a valid potion!")
+			return
+		}
+		pID := globalPotions[idx].ID
+
+		amt, _ := strconv.Atoi(inputBuyAmt.GetText())
+		if pID <= 0 || amt <= 0 {
+			statusLog.SetText(statusLog.GetText(false) + "\n  [red]Error: Invalid Amount!")
+			return
+		}
+		statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [yellow]Executing Bulk Buy: %dx Potion %d...", amt, pID))
+		go func() {
+			out, err := api.BuyPotions(localClient, pID, amt)
+			App.QueueUpdateDraw(func() {
+				if err != nil {
+					statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [red]Buy Failed: [white]%s %s", err.Error(), out))
+					return
+				}
+				statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [green]Buy Successful! [white]%s", out))
+			})
+		}()
+	})
+
+	// POTIONS USE FORM
+	useForm := tview.NewForm()
+	useForm.SetBorder(true).SetTitle(" Bulk Use Potions ")
+
+	useForm.AddFormItem(useDropdown)
+
+	inputUseAmt := tview.NewInputField().
+		SetLabel("Amount to Use: ").
+		SetFieldWidth(10).
+		SetText("5").
+		SetAcceptanceFunc(tview.InputFieldInteger)
+	useForm.AddFormItem(inputUseAmt)
+
+	useForm.AddButton("USE POTIONS", func() {
+		idx, _ := useDropdown.GetCurrentOption()
+		if len(myPotions) == 0 || idx < 0 || idx >= len(myPotions) {
+			statusLog.SetText(statusLog.GetText(false) + "\n  [red]Error: You must fetch markets first or select a valid potion!")
+			return
+		}
+		pID := myPotions[idx].ID
+
+		amt, _ := strconv.Atoi(inputUseAmt.GetText())
+		if pID <= 0 || amt <= 0 {
+			statusLog.SetText(statusLog.GetText(false) + "\n  [red]Error: Invalid Amount!")
+			return
+		}
+		statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [yellow]Executing Bulk Use: %dx Potion %d...", amt, pID))
+		go func() {
+			out, err := api.UsePotions(localClient, pID, amt)
+			App.QueueUpdateDraw(func() {
+				if err != nil {
+					statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [red]Use Failed: [white]%s %s", err.Error(), out))
+					return
+				}
+				statusLog.SetText(statusLog.GetText(false) + fmt.Sprintf("\n  [green]Use Successful! [white]%s", out))
+			})
+		}()
+	})
+
+	bottomFlex.AddItem(buyForm, 0, 1, false)
+	bottomFlex.AddItem(useForm, 0, 1, false)
+
+	rootFlex.AddItem(topFlex, 0, 2, true)
+	rootFlex.AddItem(bottomFlex, 0, 1, false)
+
+	return rootFlex
 }

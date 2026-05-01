@@ -1,9 +1,11 @@
 package api
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,7 @@ type OverlewdClient struct {
 var (
 	globalLock    sync.RWMutex
 	lastErrorTime time.Time
+	OnSessionInvalidated func()
 )
 
 // NewClient initializes the OverlewdClient using credentials stored in .env
@@ -31,7 +34,7 @@ func NewClient(baseURL string) *OverlewdClient {
 
 	return &OverlewdClient{
 		BaseURL:      baseURL,
-		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
+		HTTPClient:   &http.Client{Timeout: 180 * time.Second},
 		BearerToken:  os.Getenv("BEARER_TOKEN"),
 		AppVersion:   os.Getenv("APP_VERSION"),
 		UnityVersion: os.Getenv("UNITY_VERSION"),
@@ -72,6 +75,8 @@ func (c *OverlewdClient) DoRequest(req *http.Request) (*http.Response, error) {
 		triggerGlobalCooldown()
 	}
 
+	checkSessionInvalidation(resp, err)
+
 	return resp, err
 }
 
@@ -82,7 +87,33 @@ func (c *OverlewdClient) DoRequestBypassCooldown(req *http.Request) (*http.Respo
 	resp, err := c.HTTPClient.Do(req)
 	globalLock.RUnlock()
 
+	checkSessionInvalidation(resp, err)
+
 	return resp, err
+}
+
+// checkSessionInvalidation inspects non-2xx responses for session death signals.
+// Only reads the body on error status codes to avoid unnecessary allocations on healthy requests.
+func checkSessionInvalidation(resp *http.Response, err error) {
+	if err != nil || resp == nil || resp.Body == nil {
+		return
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+		return
+	}
+
+	importBytes, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	bodyLower := strings.ToLower(string(importBytes))
+	if resp.StatusCode == 401 || strings.Contains(bodyLower, "multiple devices") || strings.Contains(bodyLower, "jwt expired") {
+		if OnSessionInvalidated != nil {
+			OnSessionInvalidated()
+		}
+	}
+
+	// Restore body so callers can still read it
+	resp.Body = io.NopCloser(strings.NewReader(string(importBytes)))
 }
 
 func triggerGlobalCooldown() {

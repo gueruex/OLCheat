@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func ExtractGachaLootRecursively(data interface{}) map[string]int {
@@ -92,7 +95,7 @@ func (g *GachaBanner) FormattedTitle() string {
 		cost = g.PriceForOne.Price[0].Amount
 		currencyName = GetCurrencyName(g.PriceForOne.Price[0].CurrencyId)
 	}
-	tType := strings.Title(strings.ReplaceAll(g.TabType, "_", " "))
+	tType := cases.Title(language.English).String(strings.ReplaceAll(g.TabType, "_", " "))
 	return fmt.Sprintf("[%s] %s (Cost: %dx %s)", tType, g.TabTitle, cost, currencyName)
 }
 
@@ -194,11 +197,18 @@ Loop:
 					reportProgress(fmt.Sprintf("[Spin %d] Complete (Unmapped Drop)", spinIndex))
 				}
 			} else {
-				mu.Lock()
-				failedSpins++
-				mu.Unlock()
-				reportProgress(fmt.Sprintf("[Spin %d] Failed (State %d)", spinIndex, resp.StatusCode))
-				log.Printf("[Spin %d] Failed %d: %s", spinIndex, resp.StatusCode, string(b))
+				if resp.StatusCode == 400 {
+					mu.Lock()
+					globalLootMap["unknown:400"]++
+					mu.Unlock()
+					reportProgress(fmt.Sprintf("[Spin %d] Complete (Unknown Reward)", spinIndex))
+				} else {
+					mu.Lock()
+					failedSpins++
+					mu.Unlock()
+					reportProgress(fmt.Sprintf("[Spin %d] Failed (State %d)", spinIndex, resp.StatusCode))
+					log.Printf("[Spin %d] Failed %d: %s", spinIndex, resp.StatusCode, string(b))
+				}
 			}
 		}(i)
 	}
@@ -235,10 +245,15 @@ Loop:
 				name = GetTradableName(id)
 			case "equipment":
 				name = fmt.Sprintf("Equipment (Model %d)", id)
+			case "unknown":
+				name = "Unknown Reward (Spun via 400 Error)"
+				rarity = "Unknown"
 			default:
 				name = GetCurrencyName(id)
 			}
-			rarity = GetItemRarity(id)
+			if rarity == "" {
+				rarity = GetItemRarity(id)
+			}
 
 			rank := 0
 			color := "white"
@@ -284,7 +299,7 @@ Loop:
 
 			rDisplay := ""
 			if v.Rarity != "" {
-				rTitle := strings.Title(v.Rarity)
+				rTitle := cases.Title(language.English).String(v.Rarity)
 				// Prevent Duplicate Rarity string rendering
 				if !strings.HasPrefix(strings.ToLower(v.Name), strings.ToLower(rTitle)) {
 					rDisplay = rTitle + " "

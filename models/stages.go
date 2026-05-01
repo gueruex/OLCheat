@@ -61,10 +61,10 @@ func FetchStages(client *api.OverlewdClient) error {
 	if b, err := api.LoadOrFetch("/event-stages", "event_stages.json", client); err == nil {
 		var stages []Stage
 		if err := json.Unmarshal(b, &stages); err == nil {
-					for i := range stages {
-						stages[i].Endpoint = "event-stages"
-						stages[i].Name = stages[i].Title
-					}
+			for i := range stages {
+				stages[i].Endpoint = "event-stages"
+				stages[i].Name = stages[i].Title
+			}
 			allStages = append(allStages, stages...)
 		} else {
 			log.Printf("[ERROR] JSON Unmarshal Event failed: %v", err)

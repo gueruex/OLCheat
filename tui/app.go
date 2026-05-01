@@ -58,6 +58,22 @@ func StartApp(client *api.OverlewdClient) {
 	TabPages.AddPage("Dissolve", BuildTabDissolve(), true, false)
 	TabPages.AddPage("Market", BuildTabMarket(), true, false)
 	TabPages.AddPage("Campaigner", BuildTabCampaigner(), true, false)
+	TabPages.AddPage("Memories", BuildTabMemories(), true, false)
+
+	api.OnSessionInvalidated = func() {
+		if App != nil {
+			App.QueueUpdateDraw(func() {
+				api.WipeAuthCredentials()
+				modal := tview.NewModal().
+					SetText("Session Invalidated! (Multiple devices detected or JWT expired).\nYour .env has been completely wiped.\nPlease restart the application to pull a fresh token.").
+					AddButtons([]string{"Exit"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						App.Stop()
+					})
+				TabPages.AddPage("AuthError", modal, true, true)
+			})
+		}
+	}
 
 	// 3. Navigation Header Instructions
 	header := tview.NewTextView().
@@ -66,7 +82,7 @@ func StartApp(client *api.OverlewdClient) {
 		SetTextAlign(tview.AlignCenter)
 
 	updateHeader := func(expStr string) {
-		fmt.Fprintf(header, ` ["F1"][yellow][F1] Battler[""]  ["F2"][green][F2] Gacha[""]  ["F3"][red][F3] Batch Dissolve[""]  ["F4"][blue][F4] Market[""]  ["F5"][magenta][F5] Campaigner[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, expStr)
+		fmt.Fprintf(header, ` ["F1"][yellow][F1] Battler[""]  ["F2"][green][F2] Gacha[""]  ["F3"][red][F3] Batch Dissolve[""]  ["F4"][blue][F4] Market[""]  ["F5"][magenta][F5] Campaigner[""]  ["F6"][cyan][F6] Scenes[""]  ["ESC"][white][Esc] Quit[""]  |  [red]JWT Expires: %s `, expStr)
 	}
 
 	// Decode JWT Payload for Expiration
@@ -178,6 +194,8 @@ func StartApp(client *api.OverlewdClient) {
 				TabPages.SwitchToPage("Market")
 			case "F5":
 				TabPages.SwitchToPage("Campaigner")
+			case "F6":
+				TabPages.SwitchToPage("Memories")
 			case "ESC":
 				App.Stop()
 			}
@@ -201,19 +219,30 @@ func StartApp(client *api.OverlewdClient) {
 		} else if event.Key() == tcell.KeyF5 {
 			TabPages.SwitchToPage("Campaigner")
 			return nil
-			// } else if event.Key() == tcell.KeyEscape {
-			// 	App.Stop()
-			// 	return nil
+		} else if event.Key() == tcell.KeyF6 {
+			TabPages.SwitchToPage("Memories")
+			return nil
+		} else if event.Key() == tcell.KeyHome {
+			api.WipeAuthCredentials()
+			modal := tview.NewModal().
+				SetText(".env has been deleted!\nPlease restart the app to pull a new token.").
+				AddButtons([]string{"Exit"}).
+				SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+					App.Stop()
+				})
+			TabPages.AddPage("LogOutModal", modal, true, true)
+			TabPages.ShowPage("LogOutModal")
+			return nil
 		} else if event.Key() == tcell.KeyDelete {
 			// Dev hook to silent wipe caches
-			log.Println("[DEV] Cache purge triggered via Delete hotkey.")
+			log.Println("[INFO] Cache purge triggered via Delete hotkey.")
 			api.EnsureCacheWiped()
 			localClient := api.NewClient("https://prod.api.overlewd.ru")
 			go func() {
 				models.FetchStages(localClient) // Not actually needed unless restarting entirely, but it hydrates our globals instantly
 				models.EnrichStages(localClient)
 				api.EnrichCurrencies(localClient)
-				log.Println("[DEV] Caches fully replenished in memory!")
+				log.Println("[INFO] Caches fully replenished in memory!")
 			}()
 			return nil
 		}
